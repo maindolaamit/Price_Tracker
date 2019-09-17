@@ -5,8 +5,10 @@ from pprint import pprint
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+from os import environ
 
-SHEET_NAME = 'price_tracker'
+SHEET_NAME = 'price_tracker'  # Google Sheet Name
+GAPP_PASSWD = environ.get('GAPP_PASSWD')  # Derive Google app password from Environment variable
 
 
 def get_sheet():
@@ -90,7 +92,7 @@ def send_notification(to_email, item, url, new_price):
         server.starttls()
         server.ehlo()
 
-        server.login("maindola.amit@gmail.com", "pozpldeqgkhxejlc")
+        server.login("maindola.amit@gmail.com", GAPP_PASSWD)
 
         subject = "{}  - price has dropped !!!"
         body = "Hello, \nPrices for your Item : {} has dropped down. New price : {}, check the below link\n{" \
@@ -138,6 +140,6 @@ def check_price():
             send_notification(row['Notification To'], item_name, item_link, checked_price)
 
 
+# send_notification('maindola.amit@gmail.com', 'Item', 'www.amazon.com', 55)
 # Check the price and update
-# check_price()
-send_notification('maindola.amit@gmail.com', 'Item', 'www.amazon.com', 55)
+check_price()
