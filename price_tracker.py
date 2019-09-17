@@ -72,24 +72,42 @@ def send_notification(to_email, item, url, new_price):
     """This method will send the Notification to the user"""
     if to_email is not None:
         import smtplib
-        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=60)
-        server.set_debuglevel(1)
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        sender = "maindola.amit@gmail.com"
+        try:
+            server = smtplib.SMTP('smtp.gmail.com', 587, timeout=60)
+            # server.set_debuglevel(1)  # Uncomment to debug
+            # handshake
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            # Login to the server
+            server.login(sender, GAPP_PASSWD)
+            # form the message
+            message = MIMEMultipart("alternative")
+            message["subject"] = "{}  - price has dropped !!!".format(item)
+            message["from"] = sender
+            message["to"] = to_email
+            # Create the text and HTML version of your message
+            message_html = """\
+            <html>
+                <body>
+                    Hi,<br><br>
+                    Price for your Item : <i>{}</i> has dropped down. New price : <b>{}</b>, 
+                    Check out the below link for more details.<br>{}
+                    <br><br>Thanks,<br>Amit Maindola<br><b>Note : This is a system generated email, please do not respond</b>
+                </body>
+            <html>""".format(item, new_price, url)
 
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-
-        server.login("maindola.amit@gmail.com", GAPP_PASSWD)
-
-        subject = "{}  - price has dropped !!!"
-        body = "Hello, \nPrices for your Item : {} has dropped down. New price : {}, check the below link\n{" \
-               "}\n\nThanks,\nAmit".format(
-            item, new_price, url)
-        msg = f"Subject: {subject}\n\n{body}"
-
-        server.sendmail(to_email, msg)
-        print("Notification sent successfully")
-        server.quit()
+            message.attach(MIMEText(message_html, "html"))
+            server.sendmail(sender, to_email, message.as_string())
+            print("Notification sent successfully")
+        except Exception as e:
+            # Print any exception
+            print(e)
+        finally:
+            server.quit()
 
 
 def check_price():
@@ -127,6 +145,5 @@ def check_price():
             send_notification(row['Notification To'], item_name, item_link, checked_price)
 
 
-send_notification('maindola.amit@gmail.com', 'Item', 'www.amazon.com', 55)
 # Check the price and update
-# check_price()
+check_price()
