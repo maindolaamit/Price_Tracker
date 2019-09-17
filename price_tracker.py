@@ -21,19 +21,6 @@ def get_sheet():
     return gc.open(SHEET_NAME).sheet1
 
 
-def get_sheet_df():
-    SCOPE = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets',
-             "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
-    credentials = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', SCOPE)
-    gc = gspread.authorize(credentials)
-    # Save the data into data frame
-
-    sheet_values = gc.open(SHEET_NAME).sheet1.get_all_values()
-    # price_df = pd.DataFrame(sheet_values, columns=sheet_values.pop(0))
-    # return price_df
-    return None
-
-
 def get_request_soup(url):
     """ This method will fetch the request content from passed url and will return the soup element"""
     headers = {
@@ -85,7 +72,7 @@ def send_notification(to_email, item, url, new_price):
     """This method will send the Notification to the user"""
     if to_email is not None:
         import smtplib
-        server = smtplib.SMTP('smtp.gmail.com', 25, timeout=60)
+        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=60)
         server.set_debuglevel(1)
 
         server.ehlo()
@@ -116,12 +103,12 @@ def check_price():
     # Loop for each row in the sheet
     for i, row in enumerate(price_tracker.get_all_records()):
         # pprint(row)
-        # if i == 0:
-        #     continue  # Skip the Header row
         row_num = i + 2  # Add two, one for 0 index and then one for Header
         item_link = row['Item Link']
         desired_price = int(row['Desired Price'])
         item_name = checked_price = item_brand = ""
+        if item_link is None:
+            continue  # Skip if item link is not given
         # Check which brand details to be fetched
         if "myntra" in item_link:
             item_name, checked_price, item_brand = get_myntra_price(item_link)
@@ -136,10 +123,10 @@ def check_price():
         price_tracker.update_cell(row_num, 6, now)
         print("Updated Row {} for item {} .".format(row_num, item_name))
         # Send notification if current price is less than the desired price
-        if checked_price <= desired_price:
+        if desired_price is not None and checked_price <= desired_price:
             send_notification(row['Notification To'], item_name, item_link, checked_price)
 
 
-# send_notification('maindola.amit@gmail.com', 'Item', 'www.amazon.com', 55)
+send_notification('maindola.amit@gmail.com', 'Item', 'www.amazon.com', 55)
 # Check the price and update
-check_price()
+# check_price()
