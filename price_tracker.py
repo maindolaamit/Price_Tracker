@@ -1,6 +1,5 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from pprint import pprint
 
 import requests
 from bs4 import BeautifulSoup
@@ -41,7 +40,7 @@ def get_amazon_price(url):
     checked_price = 0
     # Check if it is a price range
     if "-" in price:
-        print("Taking maximum price")
+        # print("Taking maximum price")
         checked_price = float(price[price.find('-') + 3:])
     else:
         checked_price = float(price[2:])
@@ -68,7 +67,30 @@ def get_myntra_price(url):
     return item, float(price), brand
 
 
-def send_notification(to_email, item, url, new_price):
+def get_decathlon_price(url):
+    """ This method will return the price details from Decathlon"""
+    soup = get_request_soup(url)
+    soup.prettify()
+    # print(soup)
+    # Get the JSON block in the page having price details
+    item = soup.find(id='product_title').get_text().strip()
+    price = soup.find('div', {'class':'product-price'}).get_text().replace(',', '').strip().replace(' ', '')
+    brand = soup.find('span', {'class': 'mtitle'}).get_text().strip().replace(' ', '')
+
+    print("Item : {} - {} and its Price {}".format(brand, item, price))
+    return item, float(price[1:]), brand
+
+def get_ajio_price(url):
+    """ This method will return the price details from Decathlon"""
+    soup = get_request_soup(url)
+    soup.prettify()
+    # print(soup)
+    # Get the JSON block in the page having price details
+    item = soup.find(id='product_title').get_text().strip()
+    price = soup.find('div', {'class':'product-price'}).get_text().replace(',', '').strip().replace(' ', '')
+    brand = soup.find('span', {'class': 'mtitle'}).get_text().strip().replace(' ', '')
+
+def send_notification(to_email, item, url, old_price, new_price):
     """This method will send the Notification to the user"""
     if to_email is not None:
         import smtplib
@@ -94,11 +116,11 @@ def send_notification(to_email, item, url, new_price):
             <html>
                 <body>
                     Hi,<br><br>
-                    Price for your Item : <i>{}</i> has dropped down. New price : <b>{}</b>, 
+                    Item : <b><i>{}</i></b> in you Wishlist is now available at <b>{}</b> <del>{}</del>, 
                     Check out the below link for more details.<br>{}
                     <br><br>Thanks,<br>Amit Maindola<br><b>Note : This is a system generated email, please do not respond</b>
                 </body>
-            <html>""".format(item, new_price, url)
+            <html>""".format(item, new_price, old_price, url)
 
             message.attach(MIMEText(message_html, "html"))
             server.sendmail(sender, to_email, message.as_string())
@@ -124,6 +146,7 @@ def check_price():
         row_num = i + 2  # Add two, one for 0 index and then one for Header
         item_link = row['Item Link']
         desired_price = int(row['Desired Price'])
+        orignal_price = row['Orignal Price']
         item_name = checked_price = item_brand = ""
         if item_link is None:
             continue  # Skip if item link is not given
@@ -132,6 +155,8 @@ def check_price():
             item_name, checked_price, item_brand = get_myntra_price(item_link)
         elif "amazon" in item_link:
             item_name, checked_price = get_amazon_price(item_link)
+        elif "decathlon" in item_link:
+            item_name, checked_price, item_brand = get_decathlon_price(item_link)
         else:
             exit(0)
         # Update the Last checked details
@@ -142,8 +167,9 @@ def check_price():
         print("Updated Row {} for item {} .".format(row_num, item_name))
         # Send notification if current price is less than the desired price
         if desired_price is not None and checked_price <= desired_price:
-            send_notification(row['Notification To'], item_name, item_link, checked_price)
+            send_notification(row['Notification To'], item_name, item_link, orignal_price, checked_price)
 
 
+# send_notification('maindola.amit@gmail.com', 'Blue Jeans', 'www.google.co.in', 55, 45)
 # Check the price and update
 check_price()
