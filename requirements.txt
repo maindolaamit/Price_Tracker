@@ -1,0 +1,6 @@
+pip~=20.3.3
+Brotli~=1.0.9
+setuptools~=47.1.0
+requests~=2.25.1
+beautifulsoup4~=4.9.3
+gspread~=3.7.0
