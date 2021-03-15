@@ -15,8 +15,15 @@ from fake_useragent import UserAgent
 import ast
 
 SHEET_NAME = 'price_tracker'  # Google Sheet Name
-GAPP_PASSWD = os.environ.get('GAPP_PASSWD')  # Derive Google app password from Environment variable
+# Derive Google app password from Environment variable
+GAPP_PASSWD = os.environ.get('GAPP_PASSWD')
 USER_AGENT_HDR = None
+
+
+def print_msg(message, level=0):
+    seprator = '\t'
+    fmt_msg = f'{level * seprator}{message}'
+    print(fmt_msg)
 
 
 def get_sheet():
@@ -52,17 +59,18 @@ def get_sheet():
     from google.auth.exceptions import RefreshError
     # Credentials will be referred from %APPDATA%/gspread/credentials.json
     # User interaction will be asked for the first time after that it will be stored in authorized_user.json
-    auth_file = os.path.join(os.getenv('APPDATA'), 'gspread','authorized_user.json')
+    auth_file = os.path.join(os.getenv('APPDATA'),
+                             'gspread', 'authorized_user.json')
     gc = None
     try:
         gc = gspread.oauth()
     except RefreshError as e:
         # remove auth file and re-authorize
-        print("Re-Authorizing the credentials ...")
+        print_msg("Re-Authorizing the credentials ...", 1)
         os.remove(auth_file)
         gc = gspread.oauth()
 
-    print('User authorized.')
+    print_msg('User authorized.')
     # Return the First sheet
     return gc.open(SHEET_NAME).sheet1
 
@@ -106,13 +114,14 @@ def get_request_soup(url, use_agent=False):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
                       "Chrome/76.0.3809.132 Safari/537.36"}
-    url_hdr = headers 
+    url_hdr = headers
 
     # Check if use fake agent is to be used, saves time
     if use_agent:
         url_hdr = get_ua_hdr()
     page_content = requests.get(url=url, headers=url_hdr).content
     return BeautifulSoup(page_content, 'html.parser')
+
 
 def clean_price(price):
     checked_price = price
@@ -121,26 +130,33 @@ def clean_price(price):
         checked_price = float(price[price.find('-') + 3:])
     # else:
     #     checked_price = float(price[2:])
-    
-    checked_price = re.sub('[^0-9\.]', '', price) # remove any chars except numbers
+
+    # remove any chars except numbers
+    checked_price = re.sub('[^0-9\.]', '', price)
 
     return float(checked_price)
+
 
 def get_amazon_price(url):
     """ This method will return the price details from Amazon"""
     soup = get_request_soup(url)
     soup.prettify()
     # save_soup(soup, 'amazon_item.html') # Save output to html for debugging purpose
-    
+
     # Find the Item and Price
     item = soup.find(id='productTitle').get_text().strip()
-    price = soup.find('span', {'id': "priceblock_ourprice"}).get_text().replace(',', '').strip().replace(' ', '')
+    price = soup.find('span', {'id': "priceblock_ourprice"}).get_text().replace(
+        ',', '').strip().replace(' ', '')
     checked_price = clean_price(price)
-    brand = soup.find(id='bylineInfo').get_text().split(':')[1].strip()
+    try:
+        brand = soup.find(id='bylineInfo').get_text().split(':')[1].strip()
+    except Exception as e:  # Exception in getting brand
+        print_msg(f"*** Error getting brand, {e} ***", 2)
+        brand = "UKN"
 
-    item_dp = soup.find(id='imgTagWrapperId').find('img')['data-a-dynamic-image']
+    item_dp = soup.find(id='imgTagWrapperId').find('img')[
+        'data-a-dynamic-image']
     item_dp = list(ast.literal_eval(item_dp).keys())[0]
-
 
     # print("Item : {} - Price {}".format(item, checked_price))
     return item, checked_price, brand, item_dp
@@ -151,12 +167,13 @@ def get_myntra_price(url):
     soup = get_request_soup(url)
     soup.prettify()
     # save_soup(block, 'myntra_item.html') # Save output to html for debugging purpose
-    
+
     # Get the JSON block in the page having all attributes
     block = soup.findAll('script', {'type': 'application/ld+json'})[1]
     json_value = get_tag_json(block)
-    item, dp_link, price, brand = json_value["name"], json_value['image'], json_value["offers"]["price"], json_value["brand"]["name"]
-    price=clean_price(price)
+    item, dp_link, price, brand = json_value["name"], json_value[
+        'image'], json_value["offers"]["price"], json_value["brand"]["name"]
+    price = clean_price(price)
 
     # print("Item : {} and its Price {}".format(item, price))
     return item, float(price), brand, dp_link
@@ -172,7 +189,8 @@ def get_decathlon_price(url):
     block = soup.body.find('span', {'class': 'price_tag'})
     price = re.sub('[^0-9\.]', '', block.get_text())
     # derive other information - others
-    block = soup.body.find(id='__next').findAll('script', {'type': 'application/ld+json'})[1]
+    block = soup.body.find(id='__next').findAll(
+        'script', {'type': 'application/ld+json'})[1]
     json_value = get_tag_json(block)
     item, dp_link, brand = json_value['name'], json_value['image'][0], json_value['brand']['name']
 
@@ -184,7 +202,7 @@ def get_flipkart_price(url):
     """ This method will return the price details from Flipkart"""
     soup = get_request_soup(url)
     soup.prettify()
-    
+
     # save_soup(soup, 'flipkart.html') # Save output to html for debugging purpose
 
     # derive attributes
@@ -205,8 +223,51 @@ def get_ajio_price(url):
 
     # Get the JSON block in the page having price details
     item = soup.find(id='product_title').get_text().strip()
-    price = soup.find('div', {'class': 'product-price'}).get_text().replace(',', '').strip().replace(' ', '')
-    brand = soup.find('span', {'class': 'mtitle'}).get_text().strip().replace(' ', '')
+    price = soup.find('div', {'class': 'product-price'}
+                      ).get_text().replace(',', '').strip().replace(' ', '')
+    brand = soup.find('span', {'class': 'mtitle'}
+                      ).get_text().strip().replace(' ', '')
+
+
+def get_email_html(item, item_url, item_dp_link, old_price, new_price):
+    greet_snippet = f"""
+            <div style="height:10%">
+                Hello Subscriber,<br><br> One item in Item in you Wishlist is now available at 
+                <b style="color:#9b59b6">129.0</b> <del style="color:#2980b9">1299</del>.
+            </div>
+            """
+    btn_snippet = f"""
+            <a style="background: #2abc68; color: #ecf0f1; border-radius: 5em; width: 70%; 
+                                height: 10%; padding: 0.6em 2em; margin-bottom: .4em; text-decoration: none;
+                                transition: background-color 0.5s, border 0.2s, color 0.2s;"
+               href='{item_url}'>Buy Now</a>
+            """
+    content_snippet = f"""
+            <div style="text-align: center; border: 1px dashed #e67e22; margin: 1em 0; height:70%; width:50%">
+                <div style="border: 2px red;padding: 2px;">
+                    <a
+                        href="{item_url}">
+                        <img class="content-image" alt="{item}" src="{item_dp_link}"
+                            height='70%' width='60%'></img>
+                    </a>
+                    <div style="font-weight: bold; color: #2c3e50;margin:5%">{item}</div>
+                </div>
+                """ + btn_snippet + """
+            </div>"""
+    footer_snippet = """<div style="margin-top:2em; height:10%">Thanks,<br>Amit Maindola<br>
+            <div style="color:#e74c3c; font-weight:bold">Note : This is a system generated email, please do not respond</div>
+            </div>"""
+    main_html = """\
+    <html>
+        <head>
+            <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+        </head>
+        <body style="background-color: #fcfffe;color: #555;font-family:'Roboto',sans-serif;
+                        font-weight:300;margin: 0.7em 0.5em">""" + greet_snippet + content_snippet + footer_snippet + """            
+        </body>
+    <html>
+    """
+    return main_html
 
 
 def send_notification(to_email, item, item_url,
@@ -240,47 +301,34 @@ def send_notification(to_email, item, item_url,
             message["from"] = sender
             message["to"] = to_email
             # Create the text and HTML version of your message
-            message_html = f"""\
-            <html>
-                <body>
-                    Hello Subscriber,<br><br>
-                    One item in Item in you Wishlist is now available at <b>{new_price}</b> <del>{old_price}</del>.<br>
-                    <a href={item_url}>
-                        <img alt='{item}' src='{item_dp}' height='300px' width='300px'></img>
-                        <br><b><i>{item}</i></b>
-                    </a>
-                    <br><br>Thanks,<br>Amit Maindola
-                    <br><b>Note : This is a system generated email, please do not respond</b>
-                </body>
-            <html>
-            """
-            
-            # save_soup(message_html, 'mail.html') # Save output to html for debugging purpose
+            message_html = get_email_html(item, item_url, item_dp, old_price, new_price)
+            # Save output to html for debugging purpose
+            # save_soup(message_html, 'mail.html')
 
             message.attach(MIMEText(message_html, "html"))
             server.sendmail(sender, to_email, message.as_string())
-            print("Notification sent successfully")
-            
+            print_msg("Notification sent successfully", 2)
+
         except Exception as e:
-            # Print any exception TODO
+            # Print any exception
             raise Exception(f"Error while sending notification : {e}. Item : '{item}', new_price: {new_price}")
         finally:
             server.quit()
 
 
-def check_price():
-    """ This method will access the google sheet and will fetch the details
-            Item link will be used to fetch the details and then comparision will be made
-            A notification will be sent to given email if price has dropped
+def main():
+    """ Main method will access the google sheet and will fetch the details
+        Item link will be used to fetch the details and then comparison will be made
+        A notification will be sent to given email if price has dropped below or at par to Desired price
      """
     # Get the Google Sheet having items information
     price_tracker = get_sheet()
     all_records = price_tracker.get_all_records()
-    print(f"No. of rows in the sheet {len(all_records)}")
-
+    print_msg(f"No. of rows in the sheet {len(all_records)}")
+    print_msg('')
     # Loop for each row in the sheet
+    print_msg("=" * 50, 1)
     for i, row in enumerate(all_records):
-        # pprint(row)
         row_num = i + 2  # Add two, one for 0 index and then one for Header
         item_link = row['Item Link']
         desired_price = int(row['Desired Price'])
@@ -293,27 +341,34 @@ def check_price():
         try:
             # Check which brand details to be fetched
             if "myntra" in item_link:
-                item_name, checked_price, item_brand, itme_dp_link = get_myntra_price(item_link)
+                item_name, checked_price, item_brand, itme_dp_link = get_myntra_price(
+                    item_link)
             elif "amazon" in item_link:
-                item_name, checked_price, item_brand, itme_dp_link = get_amazon_price(item_link)
+                item_name, checked_price, item_brand, itme_dp_link = get_amazon_price(
+                    item_link)
             elif "decathlon" in item_link:
-                item_name, checked_price, item_brand, itme_dp_link = get_decathlon_price(item_link)
+                item_name, checked_price, item_brand, itme_dp_link = get_decathlon_price(
+                    item_link)
             elif "flipkart" in item_link:
-                item_name, checked_price, item_brand, itme_dp_link = get_decathlon_price(item_link)
+                item_name, checked_price, item_brand, itme_dp_link = get_decathlon_price(
+                    item_link)
             else:
                 exit(0)
             # Update the Last checked details
+            print_msg(f"Row num : {row_num} - Item : {item_name[:40]}", 1)
             now = datetime.today().strftime("%d-%b-%Y %I:%M %p")
-            price_tracker.update_cell(row_num, 4, item_name)
-            price_tracker.update_cell(row_num, 5, checked_price)
-            price_tracker.update_cell(row_num, 6, now)
-            print("Updated Row {} for item {} .".format(row_num, item_name))
-            
+            price_tracker.update_cell(row_num, 5, item_name)
+            price_tracker.update_cell(row_num, 6, checked_price)
+            price_tracker.update_cell(row_num, 7, now)
+            print_msg("Row updated.", 2)
+
             # Send notification if current price is less than the desired price
             if desired_price is not None and checked_price <= desired_price:
-                send_notification(row['Notification To'], item_name, item_link, orignal_price, checked_price, itme_dp_link)
+                send_notification(row['Notification To'], item_name,
+                                  item_link, orignal_price, checked_price, itme_dp_link)
         except Exception as e:
-            print(e)
+            raise e
+    print_msg("=" * 50, 1)
 
 
 def test():
@@ -323,23 +378,25 @@ def test():
     orignal_price = 1299
 
     # Amazon Block
-    item_link = 'https://www.amazon.in/gp/product/B08P4H4D2Y/ref=ox_sc_saved_title_1?smid=A7B41PSBGW6EO&psc=1'
-    item_name, checked_price, brand, dp_link = get_amazon_price(item_link)
+    # item_link = 'https://www.amazon.in/gp/product/B08P4H4D2Y/ref=ox_sc_saved_title_1?smid=A7B41PSBGW6EO&psc=1'
+    # item_name, checked_price, brand, dp_link = get_amazon_price(item_link)
     # # Myntra Block
     # item_link = 'https://www.myntra.com/1852066'
     # item_name, checked_price, brand, dp_link = get_myntra_price(item_link)
-    # # Decathlon Block
-    # item_link = 'https://www.decathlon.in/p/8388642/gym-wear-for-men/men-s-gym-t-shirt-regular-fit-sportee-100-black'
-    # item_name, checked_price, brand, dp_link = get_decathlon_price(item_link)
+    # Decathlon Block
+    item_link = 'https://www.decathlon.in/p/8388642/gym-wear-for-men/men-s-gym-t-shirt-regular-fit-sportee-100-black'
+    item_name, checked_price, brand, dp_link = get_decathlon_price(item_link)
     # # Flipkart Block
     # item_link = 'https://www.flipkart.com/asian-fitch-men-striped-casual-pink-shirt/p/itm7fb6b47259db5?pid=SHTFUC3FHPBM2NQZ&lid=LSTSHTFUC3FHPBM2NQZI3NC18&marketplace=FLIPKART&store=clo%2Fash&srno=b_1_1&otracker=browse&fm=organic&iid=en_kpTYYGUvACcxBoG84t1nNVR7GcW4ZBOBnM7qLpNOQjak4Xx2NLdOkkiYUp%2B1acwAhzGCbLnSLXyRG9lXwcH8%2FA%3D%3D&ppt=browse&ppn=browse&ssid=g8skrwky0w0000001615746304807'
     # item_name, checked_price, brand, dp_link = get_flipkart_price(item_link)
 
-    print(f"Item Name : {item_name} | Price : {checked_price} | Brand : {brand}")
-    send_notification('maindola.amit@gmail.com', item_name, item_link, orignal_price, checked_price, dp_link)
+    print(
+        f"Item Name : {item_name} | Price : {checked_price} | Brand : {brand}")
+    send_notification('maindola.amit@gmail.com', item_name,
+                      item_link, orignal_price, checked_price, dp_link)
 
 
 # Check the price and update
 if __name__ == '__main__':
     # test()
-    check_price() # Check prices of all items in the sheet
+    main()  # Check prices of all items in the sheet
