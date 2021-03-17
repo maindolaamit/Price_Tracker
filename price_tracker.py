@@ -1,16 +1,10 @@
-import re
-
+import re, traceback
 import gspread
 # from os import environ, path
 import os
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
-# from google.auth.transport.requests import Request
-# from google_auth_oauthlib.flow import InstalledAppFlow
-# from googleapiclient.discovery import build
-# from oauth2client.service_account import ServiceAccountCredentials
-# import pickle
 from fake_useragent import UserAgent
 import ast
 
@@ -18,47 +12,25 @@ SHEET_NAME = 'price_tracker'  # Google Sheet Name
 # Derive Google app password from Environment variable
 GAPP_PASSWD = os.environ.get('GAPP_PASSWD')
 USER_AGENT_HDR = None
+OUTPUT_FILE = None
 
 
 def print_msg(message, level=0):
+    """ Print the message in formatted way and writes to the log """
     seprator = '\t'
     fmt_msg = f'{level * seprator}{message}'
     print(fmt_msg)
+    print(fmt_msg, file=OUTPUT_FILE)
 
 
 def get_sheet():
-    """ This method will Authorize the google drive and will fetch the Sheet"""
-    # scopes = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets',
-    #           "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
-
-    # # The file token.pickle stores the user's access and refresh tokens, and is
-    # # created automatically when the authorization flow completes for the first
-    # # time.
-    # creds = None
-    # if os.path.exists('token.pickle'):
-    #     with open('token.pickle', 'rb') as token:
-    #         creds = pickle.load(token)
-    # # If there are no (valid) credentials available, let the user log in.
-    # if not creds or not creds.valid:
-    #     if creds and creds.expired and creds.refresh_token:
-    #         creds.refresh(Request())
-    #     else:
-    #         flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
-    #         creds = flow.run_local_server(port=0)
-    #     # Save the credentials for the next run
-    #     with open('token.pickle', 'wb') as token:
-    #         pickle.dump(creds, token)
-
-    # service = build('sheets', 'v4', credentials=creds)
-
-    # sheet = service.spreadsheets()
-
-    # credentials = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, SCOPES)
-    # gc = gspread.authorize(credentials)
-
+    """ 
+    This method will Authorize the google drive and will fetch the Sheet
+    Credentials will be referred from %APPDATA%/gspread/credentials.json
+    User interaction will be asked for the first time after that it will be stored in authorized_user.json
+    """
     from google.auth.exceptions import RefreshError
-    # Credentials will be referred from %APPDATA%/gspread/credentials.json
-    # User interaction will be asked for the first time after that it will be stored in authorized_user.json
+     
     auth_file = os.path.join(os.getenv('APPDATA'),
                              'gspread', 'authorized_user.json')
     gc = None
@@ -232,7 +204,7 @@ def get_ajio_price(url):
 def get_email_html(item, item_url, item_dp_link, old_price, new_price):
     greet_snippet = f"""
             <div style="height:10%">
-                Hello Subscriber,<br><br> One item in Item in you Wishlist is now available at 
+                Hello Subscriber,<br><br> One item in you Wishlist is now available at 
                 <b style="color:#9b59b6">129.0</b> <del style="color:#2980b9">1299</del>.
             </div>
             """
@@ -322,6 +294,8 @@ def main():
         A notification will be sent to given email if price has dropped below or at par to Desired price
      """
     # Get the Google Sheet having items information
+    now = datetime.today().strftime("%d-%b-%Y %I:%M %p")
+    print_msg(f"Starting Program {now}")
     price_tracker = get_sheet()
     all_records = price_tracker.get_all_records()
     print_msg(f"No. of rows in the sheet {len(all_records)}")
@@ -355,8 +329,7 @@ def main():
             else:
                 exit(0)
             # Update the Last checked details
-            print_msg(f"Row num : {row_num} - Item : {item_name[:40]}", 1)
-            now = datetime.today().strftime("%d-%b-%Y %I:%M %p")
+            print_msg(f"Row num : {row_num} - Item : {item_name[:40]} - Checked price : {checked_price}", 1)
             price_tracker.update_cell(row_num, 5, item_name)
             price_tracker.update_cell(row_num, 6, checked_price)
             price_tracker.update_cell(row_num, 7, now)
@@ -390,13 +363,29 @@ def test():
     # item_link = 'https://www.flipkart.com/asian-fitch-men-striped-casual-pink-shirt/p/itm7fb6b47259db5?pid=SHTFUC3FHPBM2NQZ&lid=LSTSHTFUC3FHPBM2NQZI3NC18&marketplace=FLIPKART&store=clo%2Fash&srno=b_1_1&otracker=browse&fm=organic&iid=en_kpTYYGUvACcxBoG84t1nNVR7GcW4ZBOBnM7qLpNOQjak4Xx2NLdOkkiYUp%2B1acwAhzGCbLnSLXyRG9lXwcH8%2FA%3D%3D&ppt=browse&ppn=browse&ssid=g8skrwky0w0000001615746304807'
     # item_name, checked_price, brand, dp_link = get_flipkart_price(item_link)
 
-    print(
-        f"Item Name : {item_name} | Price : {checked_price} | Brand : {brand}")
+    print(f"Item Name : {item_name} | Price : {checked_price} | Brand : {brand}")
     send_notification('maindola.amit@gmail.com', item_name,
                       item_link, orignal_price, checked_price, dp_link)
 
 
+def check_enviorn():    
+    global GAPP_PASSWD
+    if GAPP_PASSWD == None:
+        print_msg()
+        GAPP_PASSWD = input('Creating Enviornment variable GAPP_PASSWD. Enter the passcode generated in Google Account Security for Application use :')
+        os.environ['GAPP_PASSWD'] = GAPP_PASSWD
+        print_msg('Temporary Enviornment variable set, please set the enviornment variable GAPP_PASSWD manually in your Host machine.')
+
+
 # Check the price and update
 if __name__ == '__main__':
-    # test()
-    main()  # Check prices of all items in the sheet
+    try:
+        OUTPUT_FILE = open('output.log', 'w')
+        check_enviorn() # Check if enviornment variable is set or not
+        # test()
+        main()  # Check prices of all items in the sheet
+        OUTPUT_FILE.close()
+    except:
+        traceback.print_exc(file=OUTPUT_FILE)
+    finally:
+        OUTPUT_FILE.close()
