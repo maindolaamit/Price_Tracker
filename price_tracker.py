@@ -340,7 +340,8 @@ def main():
                 send_notification(row['Notification To'], item_name,
                                   item_link, orignal_price, checked_price, itme_dp_link)
         except Exception as e:
-            raise e
+            # raise e
+            traceback.print_exc(file=OUTPUT_FILE)
     print_msg("=" * 50, 1)
 
 
@@ -380,11 +381,12 @@ def check_enviorn():
 # Check the price and update
 if __name__ == '__main__':
     try:
+        global OUTPUT_FILE
         OUTPUT_FILE = open('output.log', 'w')
         check_enviorn() # Check if enviornment variable is set or not
         # test()
         main()  # Check prices of all items in the sheet
-        OUTPUT_FILE.close()
+        # OUTPUT_FILE.close()
     except:
         traceback.print_exc(file=OUTPUT_FILE)
     finally:
