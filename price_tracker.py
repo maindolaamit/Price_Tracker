@@ -12,7 +12,7 @@ SHEET_NAME = 'price_tracker'  # Google Sheet Name
 # Derive Google app password from Environment variable
 GAPP_PASSWD = os.environ.get('GAPP_PASSWD')
 USER_AGENT_HDR = None
-OUTPUT_FILE = None
+OUTPUT_FILE = open('output.log', 'w')
 
 
 def print_msg(message, level=0):
@@ -205,7 +205,7 @@ def get_email_html(item, item_url, item_dp_link, old_price, new_price):
     greet_snippet = f"""
             <div style="height:10%">
                 Hello Subscriber,<br><br> One item in you Wishlist is now available at 
-                <b style="color:#9b59b6">129.0</b> <del style="color:#2980b9">1299</del>.
+                <b style="color:#9b59b6">{new_price}</b> <del style="color:#2980b9">{old_price}</del>.
             </div>
             """
     btn_snippet = f"""
@@ -306,7 +306,7 @@ def main():
         row_num = i + 2  # Add two, one for 0 index and then one for Header
         item_link = row['Item Link']
         desired_price = int(row['Desired Price'])
-        orignal_price = row['Orignal Price']
+        orignal_price = int(row['Orignal Price'])
         item_name = checked_price = item_brand = itme_dp_link = ""
 
         if item_link is None:
@@ -381,8 +381,6 @@ def check_enviorn():
 # Check the price and update
 if __name__ == '__main__':
     try:
-        global OUTPUT_FILE
-        OUTPUT_FILE = open('output.log', 'w')
         check_enviorn() # Check if enviornment variable is set or not
         # test()
         main()  # Check prices of all items in the sheet
